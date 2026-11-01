@@ -174,6 +174,13 @@ echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
 #注: 不装 luci-app-$WRT_THEME-config(主题配置器), 用主题原始状态(用户要求删除 argon-config)
 
+#编译期删除 argon-config 菜单 + Plugins 菜单(不编译进固件)
+#1) argon-config 菜单: luci-theme-argon v3 主题包自带(路径 package/luci-theme-argon)
+find ./package -type f -name "luci-app-argon-config.json" -path "*menu.d*" -delete 2>/dev/null
+#2) Plugins 菜单: luci-mod-system.json 的 admin/system/plugins 条目
+LUCI_MENU=$(find ./feeds/luci -type f -name "luci-mod-system.json" -path "*menu.d*" 2>/dev/null | head -1)
+[ -n "$LUCI_MENU" ] && jq 'del(."admin/system/plugins")' "$LUCI_MENU" > /tmp/menu.json && mv /tmp/menu.json "$LUCI_MENU"
+
 #apk软件源(snapshots 滚动版)
 #★2026-09-28 实测: 国内镜像对 snapshots 全部不可用——清华/USTC/阿里/腾讯 404,
 #  SJTU 有但把 packages.adb 302 重定向到 mirrors.zju.edu.cn(浙大), 而浙大仅 ~6KB/s 巨慢,
