@@ -35,7 +35,7 @@ jobs:
       matrix:
         CONFIG: ${{ fromJSON(inputs.CONFIGS || '["RK3528-R28S-FULL"]') }}
         SOURCE: [immortalwrt/immortalwrt]
-        BRANCH: [master]
+        BRANCH: [openwrt-25.12]
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:
