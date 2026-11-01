@@ -41,11 +41,11 @@ jobs:
     with:
       WRT_CONFIG: ${{matrix.CONFIG}}
       WRT_THEME: argon
-      WRT_NAME: DWRT
-      WRT_SSID: DWRT
-      WRT_WORD: 12345678
-      WRT_IP: 192.168.10.1
-      WRT_PW: password
+      WRT_NAME: R28S
+      WRT_SSID: TRAVEL4ME
+      WRT_WORD: fafbfcfdfe
+      WRT_IP: 192.168.123.219
+      WRT_PW: Opep51_-
       WRT_REPO: https://github.com/${{matrix.SOURCE}}.git
       WRT_BRANCH: ${{matrix.BRANCH}}
       WRT_SOURCE: ${{matrix.SOURCE}}
