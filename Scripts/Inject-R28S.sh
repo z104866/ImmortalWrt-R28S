@@ -29,49 +29,67 @@ else
 	echo "[2] device def already present, skip"
 fi
 
-# ---- 2.5) 升级 U-Boot 到 2026.10 + 加原生 nanopi-zero2 target ----
-# 根因: 25.12 的 U-Boot 2025.10 对 RK3528 支持不完整(缺电源域/PCIe 等),
-#       把 nanopi-zero2 板级 dts 移植到 2025.10 编译能过但运行时起不来(eMMC 读不了).
-#       master 的 U-Boot 2026.10 原生自带 nanopi-zero2-rk3528(dts+defconfig 齐),
-#       且 ATF/TPL 与 25.12 完全一致(rk3528_bl31_v1.20.elf + ddr_1056MHz_v1.11.bin),
-#       故直接升 U-Boot 版本到 2026.10, 用原生 nanopi-zero2, 不再移植.
-UBOOT_MK="./package/boot/uboot-rockchip/Makefile"
+# ---- 2.5) 升级 U-Boot 到 2026.10(master 整套 uboot-rockchip 包) ----
+# 根因: 25.12 的 U-Boot 2025.10 对 RK3528 支持不完整(缺电源域/PCIe), 移植 nanopi-zero2
+#       运行时起不来; 且 25.12 的 uboot-rockchip patches 针对 2025.10, 单独升 PKG_VERSION
+#       补丁会失败; 2026.10 还需新下载源(git.u-boot-project.org) + v前缀构建目录.
+#       master 整套(2026.10 + patches + nanopi-zero2 target)已验证, ATF/TPL 与 25.12 一致.
+# 修法: ① git checkout master 的 uboot-rockchip 包(Makefile+patches)
+#       ② include/u-boot.mk 加 2026.10 下载源 + v前缀构建目录
+#       ③ nanopi-zero2 BUILD_DEVICES 加 r28s(master 只有 zero2)
+UBOOT_PKG="./package/boot/uboot-rockchip"
+UBOOT_MK="$UBOOT_PKG/Makefile"
+U_BOOT_MK="./include/u-boot.mk"
 
-# ① 升级 PKG_VERSION + PKG_HASH 到 2026.10
-sed -i 's/^PKG_VERSION:=2025\.10/PKG_VERSION:=2026.10/' "$UBOOT_MK"
-sed -i 's/^PKG_HASH:=b4f032848e56cc8f213ad59f9132c084dbbb632bc29176d024e58220e0efdf4a/PKG_HASH:=3f856da3cbbc93af51ff95fde18588a348b4a26723b01d9841e999d988481015/' "$UBOOT_MK"
-echo "[2.5a] U-Boot version -> 2026.10"
+# ① 用 master 的 uboot-rockchip 包替换 25.12 的
+git fetch --depth=1 origin master 2>/dev/null
+git checkout FETCH_HEAD -- package/boot/uboot-rockchip/
+echo "[2.5a] uboot-rockchip -> master"
 grep -E "^PKG_VERSION:|^PKG_HASH:" "$UBOOT_MK"
 
-# ② Makefile 加 nanopi-zero2-rk3528 target 定义 + UBOOT_TARGETS 列表
-if [ -f "$UBOOT_MK" ] && ! grep -q "define U-Boot/nanopi-zero2-rk3528" "$UBOOT_MK"; then
-	python3 - "$UBOOT_MK" <<'PYEOF'
+# ② include/u-boot.mk: 加 2026.10 下载源 + v前缀构建目录
+python3 - "$U_BOOT_MK" <<'PYEOF'
 import sys
 mk = sys.argv[1]
 with open(mk) as f:
-    content = f.read()
-target_def = '''define U-Boot/nanopi-zero2-rk3528
-  $(U-Boot/rk3528/Default)
-  NAME:=NanoPi Zero2
-  BUILD_DEVICES:= \\
-    friendlyarm_nanopi-zero2 \\
-    friendlyarm_nanopi-r28s
-endef
-
-'''
-if 'define U-Boot/nanopi-zero2-rk3528' not in content:
-    content = content.replace('define U-Boot/mangopi-m28c-rk3528', target_def + 'define U-Boot/mangopi-m28c-rk3528', 1)
-if 'nanopi-zero2-rk3528 \\' not in content:
-    content = content.replace('  mangopi-m28k-rk3528 \\\n', '  mangopi-m28k-rk3528 \\\n  nanopi-zero2-rk3528 \\\n', 1)
+    c = f.read()
+if 'git.u-boot-project.org' not in c:
+    c = c.replace(
+        'PKG_SOURCE_URL = \\\n\thttps://mirror.cyberbits.eu/u-boot \\',
+        'PKG_SOURCE_URL = \\\n\thttps://git.u-boot-project.org/u-boot/u-boot/-/releases/v$(PKG_VERSION)/downloads \\\n\thttps://mirror.cyberbits.eu/u-boot \\',
+        1
+    )
+if 'u-boot-v$(PKG_VERSION)' not in c:
+    c = c.replace(
+        'PKG_BUILD_DIR = $(BUILD_DIR)/$(PKG_NAME)-$(BUILD_VARIANT)/$(PKG_NAME)-$(PKG_VERSION)\n',
+        'PKG_BUILD_DIR = $(BUILD_DIR)/$(PKG_NAME)-$(BUILD_VARIANT)/$(PKG_NAME)-$(PKG_VERSION)\nifndef PKG_SOURCE_PROTO\nifeq ($(firstword $(sort $(PKG_VERSION) 2026.10)),2026.10)\n  PKG_BUILD_DIR = $(BUILD_DIR)/$(PKG_NAME)-$(BUILD_VARIANT)/$(PKG_NAME)-v$(PKG_VERSION)\nendif\nendif\n',
+        1
+    )
 with open(mk, 'w') as f:
-    f.write(content)
-print('nanopi-zero2-rk3528 target + UBOOT_TARGETS added')
+    f.write(c)
+print('u-boot.mk patched: 下载源 + v前缀构建目录')
 PYEOF
-	echo "[2.5b] nanopi-zero2-rk3528 target added"
-	grep -A6 "define U-Boot/nanopi-zero2-rk3528" "$UBOOT_MK" | head -7
-else
-	echo "[2.5b] nanopi-zero2 target already present or mk missing, skip"
-fi
+echo "[2.5b] u-boot.mk patched"
+grep -nE "git.u-boot-project.org|u-boot-v" "$U_BOOT_MK"
+
+# ③ nanopi-zero2 BUILD_DEVICES 加 r28s
+python3 - "$UBOOT_MK" <<'PYEOF'
+import sys
+mk = sys.argv[1]
+with open(mk) as f:
+    c = f.read()
+if 'friendlyarm_nanopi-r28s' not in c:
+    c = c.replace(
+        '    friendlyarm_nanopi-zero2\nendef',
+        '    friendlyarm_nanopi-zero2 \\\n    friendlyarm_nanopi-r28s\nendef',
+        1
+    )
+with open(mk, 'w') as f:
+    f.write(c)
+print('nanopi-zero2 BUILD_DEVICES += r28s')
+PYEOF
+echo "[2.5c] r28s added to nanopi-zero2 BUILD_DEVICES"
+grep -A6 "define U-Boot/nanopi-zero2-rk3528" "$UBOOT_MK" | head -7
 
 # ---- 3) board.d 网口映射 ----
 # ★compatible 前缀必须与 dts 一致 = "friendlyelec,nanopi-r28s"(不是 friendlyarm!)★
