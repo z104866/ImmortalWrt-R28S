@@ -59,7 +59,8 @@ target_def = '''define U-Boot/nanopi-zero2-rk3528
   $(U-Boot/rk3528/Default)
   NAME:=NanoPi Zero2
   BUILD_DEVICES:= \\
-    friendlyarm_nanopi-zero2
+    friendlyarm_nanopi-zero2 \\
+    friendlyarm_nanopi-r28s
 endef
 
 '''
