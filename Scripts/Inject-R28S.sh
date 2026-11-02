@@ -41,8 +41,9 @@ UBOOT_PKG="./package/boot/uboot-rockchip"
 UBOOT_MK="$UBOOT_PKG/Makefile"
 U_BOOT_MK="./include/u-boot.mk"
 
-# ① 用 master 的 uboot-rockchip 包替换 25.12 的
+# ① 用 master 的 uboot-rockchip 包替换 25.12 的(先删 25.12 旧目录, 避免残留旧补丁)
 git fetch --depth=1 origin master 2>/dev/null
+rm -rf package/boot/uboot-rockchip/
 git checkout FETCH_HEAD -- package/boot/uboot-rockchip/
 echo "[2.5a] uboot-rockchip -> master"
 grep -E "^PKG_VERSION:|^PKG_HASH:" "$UBOOT_MK"
