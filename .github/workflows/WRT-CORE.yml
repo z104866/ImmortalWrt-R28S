@@ -221,10 +221,11 @@ jobs:
             fi
 
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
-              EXT=$(basename $FILE | cut -d '.' -f 2-)
-              NAME=$(basename $FILE | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
+              BASE=$(basename "$FILE")
+              NAME=$(echo "$BASE" | grep -io "\($WRT_TARGET\).*" | sed -E 's/\.(img|bin|itb|fit)(\.gz)?$//')
+              EXT=$(echo "$BASE" | grep -oE '\.(img|bin|itb|fit)(\.gz)?$' | sed 's/^\.//')
               NEW_FILE="${WRT_INFO}-${WRT_BRANCH}-${WRT_WIFI}-${NAME}${FULL_MARK}-${WRT_DATE}.${EXT}"
-              mv -f $FILE ./upload/$NEW_FILE
+              mv -f "$FILE" "./upload/$NEW_FILE"
             done
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
