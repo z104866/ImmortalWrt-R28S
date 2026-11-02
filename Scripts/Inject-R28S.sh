@@ -29,24 +29,19 @@ else
 	echo "[2] device def already present, skip"
 fi
 
-# ---- 2.5) 移植 nanopi-zero2 U-Boot target 到 25.12 ----
-# 根因: 25.12 的 U-Boot 2025.10 无 nanopi-zero2-rk3528 target(master 独有),
-#       而 R28S 必须用 friendlyelec 同厂的 nanopi-zero2 板级 dts(U-Boot proper 层),
-#       不能借 widora mangopi-m28c(不同厂商硬件, DDR/电源/外设不兼容 -> 变砖).
-# 修法: ① patch 把 nanopi-zero2 的 2 个 dts 加进 U-Boot 源码
-#       ② Makefile 加 nanopi-zero2-rk3528 target(BUILD_DEVICES=friendlyarm_nanopi-zero2)
+# ---- 2.5) 升级 U-Boot 到 2026.10 + 加原生 nanopi-zero2 target ----
+# 根因: 25.12 的 U-Boot 2025.10 对 RK3528 支持不完整(缺电源域/PCIe 等),
+#       把 nanopi-zero2 板级 dts 移植到 2025.10 编译能过但运行时起不来(eMMC 读不了).
+#       master 的 U-Boot 2026.10 原生自带 nanopi-zero2-rk3528(dts+defconfig 齐),
+#       且 ATF/TPL 与 25.12 完全一致(rk3528_bl31_v1.20.elf + ddr_1056MHz_v1.11.bin),
+#       故直接升 U-Boot 版本到 2026.10, 用原生 nanopi-zero2, 不再移植.
 UBOOT_MK="./package/boot/uboot-rockchip/Makefile"
-UBOOT_PATCH_DIR="./package/boot/uboot-rockchip/patches"
-UBOOT_PATCH_SRC="$PATCH_DIR/uboot-nanopi-zero2.patch"
 
-# ① dts patch 进 uboot-rockchip patches 目录
-if [ -f "$UBOOT_PATCH_SRC" ]; then
-	mkdir -p "$UBOOT_PATCH_DIR"
-	cp -f "$UBOOT_PATCH_SRC" "$UBOOT_PATCH_DIR/950-rk3528-nanopi-zero2.patch"
-	echo "[2.5a] nanopi-zero2 dts patch installed -> 950-rk3528-nanopi-zero2.patch"
-else
-	echo "[2.5a] WARN: uboot-nanopi-zero2.patch not found, skip"
-fi
+# ① 升级 PKG_VERSION + PKG_HASH 到 2026.10
+sed -i 's/^PKG_VERSION:=2025\.10/PKG_VERSION:=2026.10/' "$UBOOT_MK"
+sed -i 's/^PKG_HASH:=b4f032848e56cc8f213ad59f9132c084dbbb632bc29176d024e58220e0efdf4a/PKG_HASH:=3f856da3cbbc93af51ff95fde18588a348b4a26723b01d9841e999d988481015/' "$UBOOT_MK"
+echo "[2.5a] U-Boot version -> 2026.10"
+grep -E "^PKG_VERSION:|^PKG_HASH:" "$UBOOT_MK"
 
 # ② Makefile 加 nanopi-zero2-rk3528 target 定义 + UBOOT_TARGETS 列表
 if [ -f "$UBOOT_MK" ] && ! grep -q "define U-Boot/nanopi-zero2-rk3528" "$UBOOT_MK"; then
