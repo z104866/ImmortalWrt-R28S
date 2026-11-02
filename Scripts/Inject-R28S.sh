@@ -29,20 +29,52 @@ else
 	echo "[2] device def already present, skip"
 fi
 
-# ---- 2.5) 让 r28s 触发编译 m28c 的 U-Boot ----
-# 现象: pine64-img 打包时 dd 找不到 mangopi-m28c-rk3528-u-boot-rockchip.bin
-# 根因: uboot-rockchip/Makefile 里 U-Boot/mangopi-m28c-rk3528 的 BUILD_DEVICES 只含
-#       widora_mangopi-m28c, 不含新增的 friendlyarm_nanopi-r28s, 故编 r28s 时不编该 U-Boot
-# 注: 25.12 分支无 nanopi-zero2-rk3528(master 独有), RK3528 的 U-Boot 用统一 ATF/TPL,
-#     故借用 25.12 存在的 mangopi-m28c-rk3528 target(二进制通用)
-# 修法: 把 r28s 追加进该 target 的 BUILD_DEVICES 列表
+# ---- 2.5) 移植 nanopi-zero2 U-Boot target 到 25.12 ----
+# 根因: 25.12 的 U-Boot 2025.10 无 nanopi-zero2-rk3528 target(master 独有),
+#       而 R28S 必须用 friendlyelec 同厂的 nanopi-zero2 板级 dts(U-Boot proper 层),
+#       不能借 widora mangopi-m28c(不同厂商硬件, DDR/电源/外设不兼容 -> 变砖).
+# 修法: ① patch 把 nanopi-zero2 的 2 个 dts 加进 U-Boot 源码
+#       ② Makefile 加 nanopi-zero2-rk3528 target(BUILD_DEVICES=friendlyarm_nanopi-zero2)
 UBOOT_MK="./package/boot/uboot-rockchip/Makefile"
-if [ -f "$UBOOT_MK" ] && ! grep -A3 "define U-Boot/mangopi-m28c-rk3528" "$UBOOT_MK" | grep -q "friendlyarm_nanopi-r28s"; then
-	sed -i '/define U-Boot\/mangopi-m28c-rk3528/,/endef/ s/widora_mangopi-m28c$/widora_mangopi-m28c \\\n    friendlyarm_nanopi-r28s/' "$UBOOT_MK"
-	echo "[2.5] mangopi-m28c-rk3528 U-Boot BUILD_DEVICES += r28s"
-	grep -A5 "define U-Boot/mangopi-m28c-rk3528" "$UBOOT_MK" | head -8
+UBOOT_PATCH_DIR="./package/boot/uboot-rockchip/patches"
+UBOOT_PATCH_SRC="$PATCH_DIR/uboot-nanopi-zero2.patch"
+
+# ① dts patch 进 uboot-rockchip patches 目录
+if [ -f "$UBOOT_PATCH_SRC" ]; then
+	mkdir -p "$UBOOT_PATCH_DIR"
+	cp -f "$UBOOT_PATCH_SRC" "$UBOOT_PATCH_DIR/950-rk3528-nanopi-zero2.patch"
+	echo "[2.5a] nanopi-zero2 dts patch installed -> 950-rk3528-nanopi-zero2.patch"
 else
-	echo "[2.5] m28c U-Boot already covers r28s or mk missing, skip"
+	echo "[2.5a] WARN: uboot-nanopi-zero2.patch not found, skip"
+fi
+
+# ② Makefile 加 nanopi-zero2-rk3528 target 定义 + UBOOT_TARGETS 列表
+if [ -f "$UBOOT_MK" ] && ! grep -q "define U-Boot/nanopi-zero2-rk3528" "$UBOOT_MK"; then
+	python3 - "$UBOOT_MK" <<'PYEOF'
+import sys
+mk = sys.argv[1]
+with open(mk) as f:
+    content = f.read()
+target_def = '''define U-Boot/nanopi-zero2-rk3528
+  $(U-Boot/rk3528/Default)
+  NAME:=NanoPi Zero2
+  BUILD_DEVICES:= \\
+    friendlyarm_nanopi-zero2
+endef
+
+'''
+if 'define U-Boot/nanopi-zero2-rk3528' not in content:
+    content = content.replace('define U-Boot/mangopi-m28c-rk3528', target_def + 'define U-Boot/mangopi-m28c-rk3528', 1)
+if 'nanopi-zero2-rk3528 \\' not in content:
+    content = content.replace('  mangopi-m28k-rk3528 \\\n', '  mangopi-m28k-rk3528 \\\n  nanopi-zero2-rk3528 \\\n', 1)
+with open(mk, 'w') as f:
+    f.write(content)
+print('nanopi-zero2-rk3528 target + UBOOT_TARGETS added')
+PYEOF
+	echo "[2.5b] nanopi-zero2-rk3528 target added"
+	grep -A6 "define U-Boot/nanopi-zero2-rk3528" "$UBOOT_MK" | head -7
+else
+	echo "[2.5b] nanopi-zero2 target already present or mk missing, skip"
 fi
 
 # ---- 3) board.d 网口映射 ----
